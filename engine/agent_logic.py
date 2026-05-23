@@ -18,7 +18,6 @@ from engine.utils import (
 )
 
 
-
 # SYSTEM PROMPT
 SYSTEM_PROMPT = """
 Eres un asistente técnico especializado en dispositivos Samsung Galaxy.
@@ -51,7 +50,6 @@ ESTILO DE RESPUESTA
 """
 
 
-
 # AGENT ORCHESTRATOR
 class AgentOrchestrator:
 
@@ -80,15 +78,21 @@ class AgentOrchestrator:
         # MEMORIA
         self.memory = ChatMessageHistory()
 
+        # MEMORIA CONTEXTUAL
+        self.last_model = None
+        self.last_intent = None
 
+    # =====================================================
     # MODEL DETECTION
+    # =====================================================
+
     def detect_model(self, query: str):
 
         return extract_model_from_query(query)
 
-   
+    # =====================================================
     # CLASSIFY INTENT
-    
+    # =====================================================
 
     def classify_intent(self, query: str):
 
@@ -96,8 +100,10 @@ class AgentOrchestrator:
 
         modelo_detectado = self.detect_model(query)
 
-        
+        # =====================================================
         # VALIDAR DOMINIO
+        # =====================================================
+
         if not is_samsung_related(query):
 
             small_talk = [
@@ -129,8 +135,10 @@ class AgentOrchestrator:
                 "confianza": "alta"
             }
 
-        
+        # =====================================================
         # SOPORTE TECNICO
+        # =====================================================
+
         soporte_words = [
 
             "problema",
@@ -139,8 +147,11 @@ class AgentOrchestrator:
             "no funciona",
             "no carga",
             "se reinicia",
+            "reinicia",
+            "reinicio",
             "lento",
             "calienta",
+            "calentamiento",
             "pantalla negra",
             "wifi falla",
             "bluetooth falla",
@@ -150,7 +161,9 @@ class AgentOrchestrator:
             "micrófono",
             "altavoz",
             "camara",
-            "cámara"
+            "cámara",
+            "solucion",
+            "solución"
         ]
 
         if any(
@@ -164,8 +177,10 @@ class AgentOrchestrator:
                 "confianza": "alta"
             }
 
-       
+        # =====================================================
         # CONFIGURACION
+        # =====================================================
+
         config_words = [
 
             "activar",
@@ -190,8 +205,10 @@ class AgentOrchestrator:
                 "confianza": "alta"
             }
 
-        
+        # =====================================================
         # COMPARACION
+        # =====================================================
+
         compare_words = [
 
             "vs",
@@ -211,8 +228,10 @@ class AgentOrchestrator:
                 "confianza": "alta"
             }
 
-        
+        # =====================================================
         # GENERAL
+        # =====================================================
+
         general_words = [
 
             "hola",
@@ -233,8 +252,10 @@ class AgentOrchestrator:
                 "confianza": "alta"
             }
 
-       
+        # =====================================================
         # CONSULTA TECNICA
+        # =====================================================
+
         if modelo_detectado:
 
             return {
@@ -243,16 +264,20 @@ class AgentOrchestrator:
                 "confianza": "alta"
             }
 
-        
+        # =====================================================
         # FALLBACK
+        # =====================================================
+
         return {
             "intent": "general",
             "modelo_detectado": modelo_detectado,
             "confianza": "media"
         }
 
-    
+    # =====================================================
     # PLAN TASKS
+    # =====================================================
+
     def plan_tasks(self, intent, modelo):
 
         return [
@@ -268,8 +293,10 @@ class AgentOrchestrator:
             }
         ]
 
-   
+    # =====================================================
     # EXECUTE PLAN
+    # =====================================================
+
     def execute_plan(
         self,
         plan,
@@ -290,8 +317,10 @@ class AgentOrchestrator:
                 f"{step['accion']}"
             )
 
-        
+        # =====================================================
         # GENERAL
+        # =====================================================
+
         if intent == "general":
 
             messages = [
@@ -309,22 +338,30 @@ class AgentOrchestrator:
                 messages
             )
 
+        # =====================================================
         # FUERA CONTEXTO
+        # =====================================================
+
         if intent == "fuera_contexto":
 
             return (
                 "Solo puedo ayudarte con dispositivos Samsung Galaxy."
             )
 
+        # =====================================================
         # RECUPERAR CONTEXTO
+        # =====================================================
+
         context = retrieve_context(
             query=query,
             vectorstore=self.vectorstore,
             modelo=modelo
         )
 
-  
+        # =====================================================
         # PROMPT FINAL
+        # =====================================================
+
         user_message = f"""
 CONTEXTO:
 {context}
@@ -332,10 +369,15 @@ CONTEXTO:
 CONSULTA:
 {query}
 
+MODELO DETECTADO:
+{modelo}
+
 REGLAS:
 - Usa primero la información del CONTEXTO.
 - Responde solo lo necesario.
 - No agregues información de otros dispositivos.
+- Mantén la continuidad de la conversación.
+- Si el usuario sigue hablando del mismo dispositivo, conserva el contexto.
 - Si no existe información suficiente, dilo claramente.
 - Mantén respuestas técnicas pero simples.
 """
@@ -355,8 +397,10 @@ REGLAS:
 
         return response
 
-  
+    # =====================================================
     # STREAM RESPONSE
+    # =====================================================
+
     def _stream_response(self, messages):
 
         response_text = ""
@@ -379,65 +423,18 @@ REGLAS:
 
         return response_text
 
+    # =====================================================
     # HANDLE QUERY
+    # =====================================================
+
     def handle_query(self, query):
 
-        
-        # RECUPERAR ULTIMO MODELO DESDE MEMORIA
-        
-
-        ultimo_modelo = None
-
-        for msg in reversed(self.memory.messages):
-
-            content = msg.content.lower()
-
-            detected = self.detect_model(content)
-
-            if detected:
-
-                ultimo_modelo = detected
-                break
-
-        # CONSULTAS CORTAS CONTEXTUALES
-    
-
-        query_for_classification = query
-
-        if ultimo_modelo:
-
-            short_queries = [
-
-                "camara",
-                "cámara",
-                "la camara",
-                "la cámara",
-                "bateria",
-                "batería",
-                "la bateria",
-                "la batería",
-                "pantalla",
-                "procesador",
-                "ram",
-                "almacenamiento",
-                "y la camara",
-                "y la cámara",
-                "y la bateria",
-                "y la batería"
-            ]
-
-            if query.lower().strip() in short_queries:
-
-                query_for_classification = (
-                    f"{ultimo_modelo} {query}"
-                )
-
-        # ================================================
+        # =====================================================
         # CLASIFICACION
-        # ================================================
+        # =====================================================
 
         classification = self.classify_intent(
-            query_for_classification
+            query
         )
 
         intent = classification.get(
@@ -452,24 +449,99 @@ REGLAS:
             "confianza"
         )
 
+        # =====================================================
+        # MEMORIA CONTEXTUAL
+        # =====================================================
+
+        if not modelo and self.last_model:
+
+            query_lower = query.lower()
+
+            contexto_words = [
+
+                "camara",
+                "cámara",
+                "la camara",
+                "la cámara",
+
+                "bateria",
+                "batería",
+                "la bateria",
+                "la batería",
+
+                "pantalla",
+                "procesador",
+                "ram",
+                "almacenamiento",
+
+                "calienta",
+                "calentamiento",
+
+                "reinicia",
+                "reinicio",
+
+                "wifi",
+                "bluetooth",
+
+                "problema",
+                "falla",
+
+                "solucion",
+                "solución",
+
+                "que paso",
+                "qué pasó",
+
+                "como evitar",
+                "cómo evitar",
+
+                "se calienta",
+                "se reinicia"
+            ]
+
+            if any(
+                w in query_lower
+                for w in contexto_words
+            ):
+
+                modelo = self.last_model
+
+                if intent == "fuera_contexto":
+
+                    intent = "soporte"
+
+        # =====================================================
+        # GUARDAR CONTEXTO
+        # =====================================================
+
+        if modelo:
+
+            self.last_model = modelo
+
+        self.last_intent = intent
+
+        # =====================================================
+        # DEBUG
+        # =====================================================
+
         print(
             f"\n[Intención: {intent}] "
             f"[Modelo: {modelo}] "
             f"[Confianza: {confianza}]"
         )
 
-        # ================================================
+        # =====================================================
         # PLAN
-        # ================================================
+        # =====================================================
 
         plan = self.plan_tasks(
             intent,
             modelo
         )
 
-        # ================================================
-        # EJECUCION
-        # ================================================
+        # =====================================================
+        # EJECUTAR
+        # =====================================================
 
         response = self.execute_plan(
             plan,
@@ -478,9 +550,9 @@ REGLAS:
             modelo
         )
 
-        # ================================================
-        # MEMORIA
-        # ================================================
+        # =====================================================
+        # MEMORY CHAT
+        # =====================================================
 
         self.memory.add_user_message(
             query
